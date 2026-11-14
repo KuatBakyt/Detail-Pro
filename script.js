@@ -11,6 +11,91 @@ let scrollDebounce;grid.addEventListener('scroll',()=>{clearTimeout(scrollDeboun
 document.querySelectorAll('.filter').forEach(button=>button.onclick=()=>{const category=button.dataset.filter;document.querySelectorAll('.filter').forEach(b=>{const active=b===button;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});document.querySelectorAll('.work').forEach(item=>{item.hidden=category!=='all'&&item.dataset.category!==category;});});
 const range=document.getElementById('compareRange');range.oninput=()=>document.getElementById('comparison').style.setProperty('--split',range.value+'%');
 const lightbox=document.getElementById('lightbox');document.querySelectorAll('.work').forEach(work=>{const image=work.querySelector('img'),caption=work.querySelector('figcaption');const button=document.createElement('button');button.type='button';button.setAttribute('aria-label','Открыть фото: '+caption.textContent);image.before(button);button.append(image);button.onclick=()=>{document.getElementById('lightboxImage').src=image.src;document.getElementById('lightboxImage').alt=image.alt;document.getElementById('lightboxCaption').textContent=caption.textContent+' · Иллюстрация проекта';lightbox.showModal();};});document.getElementById('closeLightbox').onclick=()=>lightbox.close();lightbox.addEventListener('click',e=>{if(e.target===lightbox){const r=lightbox.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)lightbox.close();}});
-const form=document.getElementById('bookingForm'),status=document.getElementById('formStatus');document.querySelectorAll('.price-list>div').forEach(row=>row.querySelector('a').onclick=()=>{document.getElementById('clientService').value=row.querySelector('strong').textContent;});
-form.onsubmit=e=>{e.preventDefault();if(!form.reportValidity())return;const name=document.getElementById('clientName').value.trim(),phone=document.getElementById('clientPhone').value.replace(/\D/g,''),service=document.getElementById('clientService').value,comment=document.getElementById('clientComment').value.trim();if(!name||phone.length<10||phone.length>15||!service){status.textContent='Укажите имя, телефон из 10–15 цифр и выберите услугу.';return;}const message=`Здравствуйте! Интересует сайт по образцу Detail Pro.\nИмя: ${name}\nКонтакт: ${phone}\nВыбранная услуга в демо: ${service}\nКомментарий: ${comment||'Не указан'}\nЭто запрос разработчику neKerek, не запись в студию.`;window.open('https://wa.me/77476202879?text='+encodeURIComponent(message),'_blank','noopener,noreferrer');status.textContent='Сообщение подготовлено. Отправьте его самостоятельно в WhatsApp. Данные формы на сервере не сохраняются.';};
+// Set both values to the studio's real numbers before enabling live booking.
+const studioPhone = '';
+const studioWhatsApp = '';
+const contactStatus = document.getElementById('contactStatus');
+
+function wireStudioLinks(selector, number, href) {
+  document.querySelectorAll(selector).forEach(link => {
+    if (number) {
+      link.href = href;
+      return;
+    }
+    link.addEventListener('click', () => {
+      contactStatus.textContent = 'Демо: номер студии пока не указан.';
+    });
+  });
+}
+wireStudioLinks('[data-studio-call]', studioPhone, 'tel:' + studioPhone);
+wireStudioLinks('[data-studio-chat]', studioWhatsApp, 'https://wa.me/' + studioWhatsApp);
+
+const form = document.getElementById('bookingForm');
+const status = document.getElementById('formStatus');
+const { name, phone, service, comment } = form.elements;
+const submit = form.querySelector('[type="submit"]');
+
+function setFormStatus(state, message) {
+  status.dataset.state = state;
+  status.textContent = message;
+}
+
+document.querySelectorAll('.price-list > div').forEach(row => {
+  row.querySelector('a').addEventListener('click', () => {
+    service.value = row.querySelector('strong').textContent;
+    service.removeAttribute('aria-invalid');
+  });
+});
+form.addEventListener('input', event => event.target.removeAttribute('aria-invalid'));
+form.addEventListener('submit', event => {
+  event.preventDefault();
+  const digits = phone.value.replace(/\D/g, '');
+  const fields = [
+    [name, Boolean(name.value.trim()), 'Укажите имя.'],
+    [phone, digits.length >= 10 && digits.length <= 15, 'Введите телефон из 10–15 цифр.'],
+    [service, Boolean(service.value), 'Выберите услугу.']
+  ];
+  fields.forEach(([field, valid]) => field.setAttribute('aria-invalid', String(!valid)));
+  const invalid = fields.find(([, valid]) => !valid);
+  if (invalid) {
+    setFormStatus('error', invalid[2]);
+    invalid[0].focus();
+    return;
+  }
+  const message = [
+    'Здравствуйте! Хочу записаться в Detail Pro.',
+    'Имя: ' + name.value.trim(),
+    'Телефон: ' + phone.value.trim(),
+    'Услуга: ' + service.value,
+    comment.value.trim() && 'Комментарий: ' + comment.value.trim()
+  ].filter(Boolean).join('\n');
+  submit.disabled = true;
+  form.setAttribute('aria-busy', 'true');
+  setFormStatus('pending', 'Подготавливаем заявку…');
+  window.setTimeout(() => {
+    form.removeAttribute('aria-busy');
+    submit.disabled = false;
+    if (!studioWhatsApp) {
+      setFormStatus('success', 'Заявка подготовлена. В демо номер студии не указан.');
+      return;
+    }
+    setFormStatus('success', 'Заявка подготовлена, открываем WhatsApp…');
+    window.setTimeout(() => {
+      window.location.assign('https://wa.me/' + studioWhatsApp + '?text=' + encodeURIComponent(message));
+    }, 350);
+  }, 200);
+});
+
+grid.addEventListener('keydown', event => {
+  const destination = {
+    ArrowLeft: serviceIndex - 1,
+    ArrowRight: serviceIndex + 1,
+    Home: 0,
+    End: cards.length - 1
+  }[event.key];
+  if (typeof destination !== 'number' || event.target !== grid) return;
+  event.preventDefault();
+  showService(destination);
+});
+
 if(!reducedMotion.matches&&'IntersectionObserver' in window){const nodes=[...document.querySelectorAll('.reveal')];const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){entry.target.classList.remove('pending');entry.target.classList.add('visible');observer.unobserve(entry.target);}}),{threshold:.08});nodes.forEach(el=>{el.classList.add('pending');observer.observe(el);});document.documentElement.classList.add('motion-ready');}
